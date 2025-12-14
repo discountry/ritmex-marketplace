@@ -54,33 +54,45 @@ read_stdin_json() {
   # Some environments appear to keep the pipe open briefly; plain `cat` waits for EOF,
   # which can add several seconds of delay. Prefer a non-blocking read.
   if have_cmd python3; then
-    # Read until stdin is idle for a short time (or max time reached), without requiring EOF.
-    # Keeps this fast while still allowing multi-chunk writes.
+    # Read until we can successfully parse a complete JSON object (or EOF / timeout),
+    # without requiring stdin to close. This avoids delays from waiting for EOF while
+    # also avoiding premature empty reads if the writer starts slightly later.
     HOOK_JSON="$(python3 - <<'PY'
-import sys, time, select
+import json, select, sys, time
 
 MAX_BYTES = 256 * 1024
-MAX_TOTAL_SECONDS = 1.5
-IDLE_AFTER_FIRST_BYTE_SECONDS = 0.075
+MAX_TOTAL_SECONDS = 8.0
+SELECT_TIMEOUT_SECONDS = 0.1
 
 buf = bytearray()
-start = time.monotonic()
-last_read = None
+deadline = time.monotonic() + MAX_TOTAL_SECONDS
 
 stdin = sys.stdin.buffer
 fd = stdin.fileno()
 
+def try_parse_json(b: bytearray):
+  if not b:
+    return None
+  try:
+    s = b.decode("utf-8")
+  except UnicodeDecodeError:
+    return None
+  try:
+    json.loads(s)
+    return s
+  except Exception:
+    return None
+
 while True:
-  now = time.monotonic()
-  if now - start > MAX_TOTAL_SECONDS:
+  parsed = try_parse_json(buf)
+  if parsed is not None:
+    sys.stdout.write(parsed)
+    raise SystemExit(0)
+
+  if time.monotonic() >= deadline:
     break
 
-  # If we've started receiving data and it's been idle long enough, stop.
-  if last_read is not None and (now - last_read) > IDLE_AFTER_FIRST_BYTE_SECONDS:
-    break
-
-  timeout = 0.05
-  r, _, _ = select.select([fd], [], [], timeout)
+  r, _, _ = select.select([fd], [], [], SELECT_TIMEOUT_SECONDS)
   if not r:
     continue
 
@@ -88,12 +100,12 @@ while True:
   if not chunk:
     # EOF
     break
-  buf.extend(chunk)
-  last_read = time.monotonic()
 
+  buf.extend(chunk)
   if len(buf) >= MAX_BYTES:
     break
 
+# Best-effort: return whatever we got (may be empty or partial).
 sys.stdout.write(buf.decode("utf-8", errors="replace"))
 PY
 )"
