@@ -49,69 +49,9 @@ truncate_message() {
 read_stdin_json() {
   # Reads stdin fully into $HOOK_JSON (global). Returns non-zero if empty.
   log_debug "notification.sh invoked (pid=$$)"
-
-  # In practice, Claude Code writes a small JSON payload to stdin.
-  # Some environments appear to keep the pipe open briefly; plain `cat` waits for EOF,
-  # which can add several seconds of delay. Prefer a non-blocking read.
-  if have_cmd python3; then
-    # Read until we can successfully parse a complete JSON object (or EOF / timeout),
-    # without requiring stdin to close. This avoids delays from waiting for EOF while
-    # also avoiding premature empty reads if the writer starts slightly later.
-    HOOK_JSON="$(python3 - <<'PY'
-import json, select, sys, time
-
-MAX_BYTES = 256 * 1024
-MAX_TOTAL_SECONDS = 8.0
-SELECT_TIMEOUT_SECONDS = 0.1
-
-buf = bytearray()
-deadline = time.monotonic() + MAX_TOTAL_SECONDS
-
-stdin = sys.stdin.buffer
-fd = stdin.fileno()
-
-def try_parse_json(b: bytearray):
-  if not b:
-    return None
-  try:
-    s = b.decode("utf-8")
-  except UnicodeDecodeError:
-    return None
-  try:
-    json.loads(s)
-    return s
-  except Exception:
-    return None
-
-while True:
-  parsed = try_parse_json(buf)
-  if parsed is not None:
-    sys.stdout.write(parsed)
-    raise SystemExit(0)
-
-  if time.monotonic() >= deadline:
-    break
-
-  r, _, _ = select.select([fd], [], [], SELECT_TIMEOUT_SECONDS)
-  if not r:
-    continue
-
-  chunk = stdin.read1(8192) if hasattr(stdin, "read1") else stdin.read(8192)
-  if not chunk:
-    # EOF
-    break
-
-  buf.extend(chunk)
-  if len(buf) >= MAX_BYTES:
-    break
-
-# Best-effort: return whatever we got (may be empty or partial).
-sys.stdout.write(buf.decode("utf-8", errors="replace"))
-PY
-)"
-  else
-    HOOK_JSON="$(cat)"
-  fi
+  # Most reliable: read the full JSON payload until stdin closes.
+  # This matches the official docs + common community examples.
+  HOOK_JSON="$(cat)"
 
   if [ -z "${HOOK_JSON//$'\n'/}" ]; then
     log_debug "stdin empty; exiting"
@@ -272,7 +212,19 @@ main() {
   fi
 
   local body
-  body="$(truncate_message "${message:-Claude notification received}")"
+  if [ -n "$message" ]; then
+    body="$(truncate_message "$message")"
+  else
+    # For events like Stop that don't include a "message" field, provide a useful default.
+    case "${hook_event_name:-}" in
+      Stop)
+        body="$(truncate_message "Claude finished responding. Click to open the transcript.")"
+        ;;
+      *)
+        body="$(truncate_message "Claude notification received")"
+        ;;
+    esac
+  fi
 
   local icon_path=""
   if [ -d "/Applications/Warp.app" ]; then
