@@ -12,6 +12,8 @@
 
 set -o pipefail
 
+DEBUG_LOG="${CLAUDE_NOTIFY_DEBUG_LOG:-}"
+
 have_cmd() {
   command -v "$1" >/dev/null 2>&1
 }
@@ -19,6 +21,17 @@ have_cmd() {
 log_err() {
   # shellcheck disable=SC2059
   printf "%s\n" "$*" >&2
+}
+
+log_debug() {
+  # Enable by setting: CLAUDE_NOTIFY_DEBUG_LOG=/path/to/logfile
+  # Keep this best-effort; never break hook execution.
+  if [ -z "$DEBUG_LOG" ]; then
+    return 0
+  fi
+  {
+    printf "%s %s\n" "$(date -u +'%Y-%m-%dT%H:%M:%SZ')" "$*"
+  } >>"$DEBUG_LOG" 2>/dev/null || true
 }
 
 truncate_message() {
@@ -35,10 +48,13 @@ truncate_message() {
 
 read_stdin_json() {
   # Reads stdin fully into $HOOK_JSON (global). Returns non-zero if empty.
+  log_debug "notification.sh invoked (pid=$$)"
   HOOK_JSON="$(cat)"
   if [ -z "${HOOK_JSON//$'\n'/}" ]; then
+    log_debug "stdin empty; exiting"
     return 1
   fi
+  log_debug "stdin received (${#HOOK_JSON} bytes)"
   return 0
 }
 
@@ -182,6 +198,7 @@ main() {
   fi
 
   parse_hook_json
+  log_debug "parsed hook_event_name=${hook_event_name:-} notification_type=${notification_type:-} transcript_path=${transcript_path:-}"
 
   local title="${CLAUDE_NOTIFY_TITLE:-Claude Code}"
   local subtitle=""
@@ -213,10 +230,12 @@ main() {
   fi
 
   if have_cmd terminal-notifier; then
+    log_debug "using terminal-notifier"
     notify_macos_terminal_notifier "$title" "$subtitle" "$body" "$execute_cmd" "$open_target" "$icon_path" || true
     exit 0
   fi
 
+  log_debug "using osascript fallback"
   notify_macos_osascript "$title" "$subtitle" "$body" || true
 }
 
