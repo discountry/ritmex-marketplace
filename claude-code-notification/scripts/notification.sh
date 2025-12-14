@@ -49,7 +49,58 @@ truncate_message() {
 read_stdin_json() {
   # Reads stdin fully into $HOOK_JSON (global). Returns non-zero if empty.
   log_debug "notification.sh invoked (pid=$$)"
-  HOOK_JSON="$(cat)"
+
+  # In practice, Claude Code writes a small JSON payload to stdin.
+  # Some environments appear to keep the pipe open briefly; plain `cat` waits for EOF,
+  # which can add several seconds of delay. Prefer a non-blocking read.
+  if have_cmd python3; then
+    # Read until stdin is idle for a short time (or max time reached), without requiring EOF.
+    # Keeps this fast while still allowing multi-chunk writes.
+    HOOK_JSON="$(python3 - <<'PY'
+import sys, time, select
+
+MAX_BYTES = 256 * 1024
+MAX_TOTAL_SECONDS = 1.5
+IDLE_AFTER_FIRST_BYTE_SECONDS = 0.075
+
+buf = bytearray()
+start = time.monotonic()
+last_read = None
+
+stdin = sys.stdin.buffer
+fd = stdin.fileno()
+
+while True:
+  now = time.monotonic()
+  if now - start > MAX_TOTAL_SECONDS:
+    break
+
+  # If we've started receiving data and it's been idle long enough, stop.
+  if last_read is not None and (now - last_read) > IDLE_AFTER_FIRST_BYTE_SECONDS:
+    break
+
+  timeout = 0.05
+  r, _, _ = select.select([fd], [], [], timeout)
+  if not r:
+    continue
+
+  chunk = stdin.read1(8192) if hasattr(stdin, "read1") else stdin.read(8192)
+  if not chunk:
+    # EOF
+    break
+  buf.extend(chunk)
+  last_read = time.monotonic()
+
+  if len(buf) >= MAX_BYTES:
+    break
+
+sys.stdout.write(buf.decode("utf-8", errors="replace"))
+PY
+)"
+  else
+    HOOK_JSON="$(cat)"
+  fi
+
   if [ -z "${HOOK_JSON//$'\n'/}" ]; then
     log_debug "stdin empty; exiting"
     return 1
