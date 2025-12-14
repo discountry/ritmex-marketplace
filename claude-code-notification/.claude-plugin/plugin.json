@@ -1,0 +1,8 @@
+{
+"name": "claude-code-notification",
+"description": "Show cli notification",
+"version": "1.0.0",
+"author": {
+"name": "discountry"
+}
+}

@@ -1,0 +1,13 @@
+{
+"name": "ritmex-marketplace",
+"owner": {
+"name": "discountry"
+},
+"plugins": [
+{
+  "name": "claude-code-notification",
+  "source": "./claude-code-notification",
+  "description": "Show cli notification"
+}
+]
+}
