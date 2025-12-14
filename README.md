@@ -1,45 +1,76 @@
 # ritmex-marketplace
 
-Local marketplace repo for Claude plugins.
+Claude Code plugin marketplace hosting `claude-code-notification`.
 
-## Contents
+## Quick start
 
-- **Marketplace definition**: `.claude-plugin/marketplace.json`
-- **Plugin**: `claude-code-notification/`
-  - **Plugin manifest**: `claude-code-notification/.claude-plugin/plugin.json`
-  - **Hook config**: `claude-code-notification/hooks/hooks.json`
-  - **Hook script**: `claude-code-notification/scripts/notification.sh`
+- Add marketplace (GitHub):
+  - `/plugin marketplace add discountry/ritmex-marketplace`
+- Install plugin:
+  - `/plugin install claude-code-notification@ritmex-marketplace`
+- Verify:
+  - `/plugin marketplace list`
+  - `/plugin`
 
-## Plugins
+## Dependencies (macOS)
 
-### claude-code-notification
+Recommended (best experience: app icon + click actions):
+
+- Install `terminal-notifier` via Homebrew:
+  - `brew install terminal-notifier` (see [`terminal-notifier` Homebrew formula](https://formulae.brew.sh/formula/terminal-notifier))
+
+Fallback (no install needed on most macOS machines):
+
+- `osascript` (Notification Center)
+
+Optional:
+
+- `jq` (faster JSON parsing)
+- `python3` (JSON parsing fallback if `jq` isn’t installed)
+
+## Team / project setup (optional)
+
+Add the marketplace automatically for a repo by setting `extraKnownMarketplaces` in `.claude/settings.json`:
+
+```json
+{
+  "extraKnownMarketplaces": {
+    "ritmex-marketplace": {
+      "source": {
+        "source": "github",
+        "repo": "discountry/ritmex-marketplace"
+      }
+    }
+  },
+  "enabledPlugins": {
+    "claude-code-notification@ritmex-marketplace": true
+  }
+}
+```
+
+## Plugin: claude-code-notification
 
 Shows a macOS notification when Claude Code triggers the `Notification` hook.
 
-#### How it works
-
-- Expects **JSON on stdin** from the hook runtime (fields like `message`, `notification_type`, `hook_event_name`, `transcript_path`).
-- If `terminal-notifier` is available, it uses it (supports icons + click actions).
-- Otherwise it falls back to `osascript` (Notification Center).
-- For `notification_type=permission_prompt`, clicking the notification attempts to focus **Warp**, otherwise **Terminal**.
-- If a `transcript_path` is present (and no focus action is configured), clicking opens the transcript file.
-
-#### Requirements
-
-- **macOS**
-- One of:
-  - **Recommended**: `terminal-notifier`
-  - **Fallback**: `osascript` (usually present on macOS)
-- Optional:
-  - `jq` (faster JSON parsing)
-  - `python3` (JSON parsing fallback if `jq` isn’t installed)
-
-#### Configuration
+### Configuration
 
 - **Hook wiring**: `claude-code-notification/hooks/hooks.json`
-- **Script path**: `${CLAUDE_PLUGIN_ROOT}/scripts/notification.sh`
-- **Env vars**:
-  - `CLAUDE_NOTIFY_TITLE` (defaults to `Claude Code`)
+- **Script**: `claude-code-notification/scripts/notification.sh`
+- **Env**:
+  - `CLAUDE_NOTIFY_TITLE` (default: `Claude Code`)
+
+### Behavior
+
+- Reads **JSON from stdin** (e.g. `message`, `notification_type`, `hook_event_name`, `transcript_path`).
+- Uses `terminal-notifier` if available; otherwise uses `osascript`.
+- If `notification_type=permission_prompt`, clicking focuses **Warp** (if installed) or **Terminal**.
+- Otherwise, if `transcript_path` is present, clicking opens the transcript file.
+
+## Files
+
+- Marketplace definition: `.claude-plugin/marketplace.json`
+- Plugin manifest: `claude-code-notification/.claude-plugin/plugin.json`
+- Hooks config: `claude-code-notification/hooks/hooks.json`
 
 ## License
 
