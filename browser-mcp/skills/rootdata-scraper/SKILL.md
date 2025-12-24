@@ -307,44 +307,13 @@ Present the final markdown table with all today's projects, sorted by total rais
 ### Step 11: Send to Telegram (Optional)
 After generating the final markdown output, check if the user has configured the `telegram-notification` MCP server:
 
-1. **Check Configuration:**
-   - Look for `telegram-notification` in the MCP server configuration
-   - The configuration should look like:
-   ```json
-   "telegram-notification": {
-     "type": "stdio",
-     "command": "npx",
-     "args": [
-       "-y",
-       "telegram-notification-mcp"
-     ],
-     "env": {
-       "TELEGRAM_BOT_TOKEN": "...",
-       "TELEGRAM_CHAT_ID": "..."
-     }
-   }
-   ```
+Tool name: send_notification
 
-2. **If telegram-notification is configured:**
-   - Use the `send_notification` tool to send the compiled markdown results to Telegram
-   - Format the message as:
-     ```
-     # Today's Crypto Fundraising Projects
-     
-     [Full markdown content from Step 10]
-     ```
-   - Call the tool with:
-     ```json
-     {
-       "method": "tools/call",
-       "params": {
-         "name": "send_notification",
-         "arguments": {
-           "message": "[Full markdown content from Step 10]"
-         }
-       }
-     }
-     ```
+Full name: mcp__telegram-notification__send_notification 
+
+Parameters:
+- message (required): string - The message to send
 
 3. **If telegram-notification is NOT configured:**
+
    - Skip this step and only display the results in the terminal/chat
