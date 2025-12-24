@@ -7,18 +7,9 @@ description: Using Browser MCP, scrape rootdata fundraising data (Token Issuance
 
 ## Instructions
 
-### Step 1: Get Current Date
-First, get the current date to filter today's projects:
+The current date is: !`date` Please use this date for any time-sensitive tasks.
 
-```python
-from datetime import datetime
-
-now = datetime.now()
-today_date = now.strftime("%b %d")  # Format: "Dec 24"
-print(f"Today's date: {today_date}")
-```
-
-### Step 2: Navigate to Fundraising Page
+### Step 1: Navigate to Fundraising Page
 Open the RootData fundraising page using Browser MCP:
 
 - Use `browser_navigate` action with URL: `https://www.rootdata.com/Fundraising`
@@ -34,65 +25,9 @@ After the page loads, you need to **first expand the Token Issuance menu**, then
    - Wait for the menu to expand using `browser_wait_for` (wait for text "No Token" to appear)
 
 2. **Then, select the "No Token" radio option:**
-   - Use `browser_evaluate` to run JavaScript that finds and clicks the "No Token" radio button
+   - Use `browser_click` or `browser_evaluate` to run JavaScript that finds and clicks the "No Token" radio button
    - The radio is inside the expanded panel: `<div role="tabpanel" id="el-collapse-content-7949">` (or similar dynamic ID)
-   - Look for `<label role="radio">` containing text "No Token"
-
-3. **JavaScript code to handle both steps:**
-```javascript
-(function () {
-  // Step 1: Find and click Token Issuance header to expand the menu
-  const headers = Array.from(
-    document.querySelectorAll('.el-collapse-item__header')
-  );
-  const tokenIssuanceHeader = headers.find(h =>
-    h.textContent.trim().includes('Token Issuance')
-  );
-  
-  if (!tokenIssuanceHeader) {
-    return { success: false, reason: 'Token Issuance header not found' };
-  }
-
-  // Check if already expanded (has is-active class on parent)
-  const collapseItem = tokenIssuanceHeader.closest('.el-collapse-item');
-  const isExpanded = collapseItem && collapseItem.classList.contains('is-active');
-  
-  if (!isExpanded) {
-    // Click to expand
-    tokenIssuanceHeader.click();
-    // Wait a moment for the menu to expand
-    return { success: true, action: 'expanded', needsWait: true };
-  }
-
-  // Step 2: Find and click "No Token" radio (menu is now expanded)
-  const radioLabels = Array.from(
-    document.querySelectorAll('label.el-radio')
-  );
-  const noTokenLabel = radioLabels.find(label =>
-    label.textContent.trim().includes('No Token')
-  );
-
-  if (!noTokenLabel) {
-    return { success: false, reason: '"No Token" radio not found. Menu may not be expanded yet.' };
-  }
-
-  // Check if already selected
-  const isChecked = noTokenLabel.classList.contains('is-checked');
-  if (isChecked) {
-    return { success: true, action: 'already_selected' };
-  }
-
-  // Click the radio input or label
-  const input = noTokenLabel.querySelector('input[type="radio"]');
-  if (input) {
-    input.click();
-  } else {
-    noTokenLabel.click();
-  }
-
-  return { success: true, action: 'selected' };
-})();
-```
+   - Look for `<label role="radio">` containing text "No Token" and click it
 
 4. **Important:** After expanding the menu, wait 500ms-1s using `browser_wait_for` (time-based wait) before trying to click "No Token", to ensure the menu animation completes.
 
@@ -115,37 +50,7 @@ Extract all project links that match today's date:
    - If date matches, extracts the project link from the Project column (1st column)
    - The link is in format: `/Projects/detail/{ProjectName}?k={encodedId}`
 
-2. JavaScript extraction code:
-```javascript
-(function() {
-  const today = new Date();
-  const todayStr = today.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-  const rows = document.querySelectorAll('table tbody tr[role="row"]');
-  const projects = [];
-  
-  rows.forEach(row => {
-    const dateCell = row.querySelector('td[aria-colindex="5"]');
-    if (dateCell) {
-      const dateText = dateCell.textContent.trim();
-      if (dateText === todayStr) {
-        const projectLink = row.querySelector('td[aria-colindex="1"] a[href*="/Projects/detail/"]');
-        if (projectLink) {
-          const href = projectLink.getAttribute('href');
-          const projectName = projectLink.textContent.trim();
-          projects.push({
-            name: projectName,
-            url: 'https://www.rootdata.com' + href
-          });
-        }
-      }
-    }
-  });
-  
-  return projects;
-})();
-```
-
-3. Store the list of project URLs for later processing
+2. Store the list of project URLs for later processing
 
 ### Step 5: Extract Project Details
 For each project URL found in Step 4, perform the following:
