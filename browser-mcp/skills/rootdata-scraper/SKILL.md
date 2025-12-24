@@ -218,6 +218,7 @@ Full name: mcp__telegram-notification__send_notification
 
 Parameters:
 - message (required): string - The message to send
+- parse_mode (optional): string - The parse mode to use, defaults to "Markdown"
 
 3. **If telegram-notification is NOT configured:**
 
