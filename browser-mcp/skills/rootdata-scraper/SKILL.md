@@ -25,28 +25,46 @@ Open the RootData fundraising page using Browser MCP:
 - Wait for the page to fully load using `browser_wait_for` (wait for text "Project" or table element to appear)
 
 ### Step 2.5: Select "No Token" in Token Issuance Filter
-After the page loads, ensure the **Token Issuance** filter is set to **No Token** so that only non-token fundraising projects are shown:
+After the page loads, you need to **first expand the Token Issuance menu**, then select **No Token** filter. The "No Token" option is hidden until the menu is expanded:
 
-1. Use `browser_evaluate` to run JavaScript that:
-   - Locates the active **Token Issuance** collapse section.
-   - Finds the radio/label whose text includes `"No Token"`.
-   - Clicks that radio input or its label to apply the filter.
+1. **First, click the "Token Issuance" collapse button to expand the menu:**
+   - Use `browser_click` or `browser_evaluate` to find and click the Token Issuance header button
+   - Look for element with `role="tab"` containing text "Token Issuance" or element with `id="el-collapse-head-7949"` (or similar dynamic ID)
+   - The button structure: `<div role="tab"><div role="button" class="el-collapse-item__header">Token Issuance</div></div>`
+   - Wait for the menu to expand using `browser_wait_for` (wait for text "No Token" to appear)
 
-2. Example JavaScript:
+2. **Then, select the "No Token" radio option:**
+   - Use `browser_evaluate` to run JavaScript that finds and clicks the "No Token" radio button
+   - The radio is inside the expanded panel: `<div role="tabpanel" id="el-collapse-content-7949">` (or similar dynamic ID)
+   - Look for `<label role="radio">` containing text "No Token"
+
+3. **JavaScript code to handle both steps:**
 ```javascript
 (function () {
-  // Ensure the Token Issuance collapse section is open (defensive, in case UI changes)
+  // Step 1: Find and click Token Issuance header to expand the menu
   const headers = Array.from(
     document.querySelectorAll('.el-collapse-item__header')
   );
   const tokenIssuanceHeader = headers.find(h =>
     h.textContent.trim().includes('Token Issuance')
   );
-  if (tokenIssuanceHeader && !tokenIssuanceHeader.classList.contains('is-active')) {
-    tokenIssuanceHeader.click();
+  
+  if (!tokenIssuanceHeader) {
+    return { success: false, reason: 'Token Issuance header not found' };
   }
 
-  // Find the "No Token" radio within the Token Issuance section
+  // Check if already expanded (has is-active class on parent)
+  const collapseItem = tokenIssuanceHeader.closest('.el-collapse-item');
+  const isExpanded = collapseItem && collapseItem.classList.contains('is-active');
+  
+  if (!isExpanded) {
+    // Click to expand
+    tokenIssuanceHeader.click();
+    // Wait a moment for the menu to expand
+    return { success: true, action: 'expanded', needsWait: true };
+  }
+
+  // Step 2: Find and click "No Token" radio (menu is now expanded)
   const radioLabels = Array.from(
     document.querySelectorAll('label.el-radio')
   );
@@ -55,9 +73,16 @@ After the page loads, ensure the **Token Issuance** filter is set to **No Token*
   );
 
   if (!noTokenLabel) {
-    return { success: false, reason: '"No Token" radio not found' };
+    return { success: false, reason: '"No Token" radio not found. Menu may not be expanded yet.' };
   }
 
+  // Check if already selected
+  const isChecked = noTokenLabel.classList.contains('is-checked');
+  if (isChecked) {
+    return { success: true, action: 'already_selected' };
+  }
+
+  // Click the radio input or label
   const input = noTokenLabel.querySelector('input[type="radio"]');
   if (input) {
     input.click();
@@ -65,11 +90,13 @@ After the page loads, ensure the **Token Issuance** filter is set to **No Token*
     noTokenLabel.click();
   }
 
-  return { success: true };
+  return { success: true, action: 'selected' };
 })();
 ```
 
-3. After clicking **No Token**, use `browser_wait_for` to wait until the table finishes reloading (e.g., wait for a row with today's date to appear, or for the loading spinner to disappear) before proceeding to table extraction.
+4. **Important:** After expanding the menu, wait 500ms-1s using `browser_wait_for` (time-based wait) before trying to click "No Token", to ensure the menu animation completes.
+
+5. After clicking **No Token**, use `browser_wait_for` to wait until the table finishes reloading (e.g., wait for a row with today's date to appear, or for the loading spinner to disappear) before proceeding to table extraction.
 
 ### Step 3: Capture Page Snapshot
 Take a snapshot to understand the page structure:
@@ -220,24 +247,48 @@ projects_data = [
 ]
 ```
 
-### Step 7: Generate Markdown Table
-Format the results as a beautiful markdown table:
+### Step 7: Generate Markdown Output
+Format the results as beautiful markdown with project separators (avoid tables for better CLI rendering):
 
 ```markdown
-# Today's Crypto Fundraising Projects
+# Today's Crypto Fundraising Projects (Dec 24, 2025)
 
-| Project | Website | Twitter | Total Raised | Investors | Tags | Founded | Premium |
-|---------|---------|---------|---------------|-----------|------|----------|---------|
-| Project Name ⭐ | [Link](url) | [@handle](url) | $XXM | Investor1, Investor2 | Tag1, Tag2 | 2022 | ⭐ |
+---
+
+## Project Name ⭐
+
+**Website:** [project.com](https://project.com)  
+**Twitter:** [@handle](https://x.com/handle)  
+**Total Raised:** $52M  
+**Investors:** Investor1, Investor2, Investor3  
+**Tags:** Tag1, Tag2, Tag3  
+**Founded:** 2022  
+**Premium:** ⭐
+
+---
+
+## Another Project
+
+**Website:** [another.com](https://another.com)  
+**Twitter:** [@another](https://x.com/another)  
+**Total Raised:** $2M  
+**Investors:** InvestorA, InvestorB  
+**Tags:** DeFi, DEX  
+**Founded:** 2025  
+
+---
 ```
 
-**Table Formatting Rules:**
-- Add ⭐ emoji after project name if `is_premium: true`
-- Website column: Show domain name as link text, full URL as link target
-- Twitter column: Show "@handle" format, extract handle from URL
-- Investors column: List all investors separated by commas, max 3 visible with "+X more" if needed
-- Tags column: List all tags separated by commas
-- Premium column: Show ⭐ if premium, empty otherwise
+**Formatting Rules:**
+- Use `---` horizontal rule as separator between projects
+- Add ⭐ emoji after project name in heading if `is_premium: true`
+- Website: Show full URL as link, extract domain name for display
+- Twitter: Extract handle from URL, show as `@handle` format with link
+- Investors: List all investors separated by commas (no truncation)
+- Tags: List all tags separated by commas
+- Premium: Show "⭐" on a separate line if premium, omit the line if not premium
+- Use bold labels (`**Label:**`) for field names
+- Keep consistent spacing and formatting
 
 ### Step 8: Handle Edge Cases
 - If a project detail page fails to load, skip it and continue with next project
