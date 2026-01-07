@@ -13,6 +13,11 @@
       "name": "browser-mcp",
       "source": "./browser-mcp",
       "description": "Browser MCP plugin"
+    },
+    {
+      "name": "remote-figma",
+      "source": "./remote-figma",
+      "description": "Remote Figma MCP plugin"
     }
   ]
 }
