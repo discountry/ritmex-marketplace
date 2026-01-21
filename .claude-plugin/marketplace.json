@@ -18,6 +18,11 @@
       "name": "remote-figma",
       "source": "./remote-figma",
       "description": "Remote Figma MCP plugin"
+    },
+    {
+      "name": "ide-status",
+      "source": "./ide-status",
+      "description": "Display IDE connection status in Claude Code status line"
     }
   ]
 }
