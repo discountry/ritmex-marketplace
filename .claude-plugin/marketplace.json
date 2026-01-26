@@ -23,6 +23,11 @@
       "name": "ide-status",
       "source": "./ide-status",
       "description": "Display IDE connection status in Claude Code status line"
+    },
+    {
+      "name": "web3-agent-browser",
+      "source": "./web3-agent-browser",
+      "description": "Web3 agent browser MCP plugin"
     }
   ]
 }

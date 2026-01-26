@@ -1,6 +1,6 @@
 # ritmex-marketplace
 
-Claude Code plugin marketplace hosting `claude-code-notification` and `browser-mcp` plugins.
+Claude Code plugin marketplace hosting `claude-code-notification`, `browser-mcp`, `remote-figma`, and `ide-status` plugins.
 
 ## Quick start
 
@@ -9,6 +9,8 @@ Claude Code plugin marketplace hosting `claude-code-notification` and `browser-m
 - Install plugins:
   - `/plugin install claude-code-notification@ritmex-marketplace`
   - `/plugin install browser-mcp@ritmex-marketplace`
+  - `/plugin install remote-figma@ritmex-marketplace`
+  - `/plugin install ide-status@ritmex-marketplace`
 - Verify:
   - `/plugin marketplace list`
   - `/plugin`
@@ -21,6 +23,8 @@ This marketplace hosts the following plugins:
 |--------|-------------|
 | `claude-code-notification` | Shows macOS notifications for Claude Code hooks |
 | `browser-mcp` | Browser automation via MCP with Google Search command and Rootdata scraper skill |
+| `remote-figma` | Figma design integration via MCP with design implementation skills |
+| `ide-status` | Display IDE connection status and model info in Claude Code status line |
 
 ## Dependencies for claude-code-notification (macOS)
 
@@ -59,7 +63,9 @@ Add the marketplace automatically for a repo by setting `extraKnownMarketplaces`
   },
   "enabledPlugins": {
     "claude-code-notification@ritmex-marketplace": true,
-    "browser-mcp@ritmex-marketplace": true
+    "browser-mcp@ritmex-marketplace": true,
+    "remote-figma@ritmex-marketplace": true,
+    "ide-status@ritmex-marketplace": true
   }
 }
 ```
@@ -98,16 +104,57 @@ Browser automation via MCP (Model Context Protocol) with tools for web navigatio
 - Use `/google-search` command
 - Use `/rootdata-scraper` skill
 
+## Plugin: ide-status
+
+Displays IDE connection status and model information in Claude Code's status line.
+
+### Features
+
+- Shows connected IDE name (e.g., VS Code, Cursor)
+- Displays current model name
+- Shows session cost in USD
+- Shows context window usage percentage
+
+### Configuration
+
+- **Hook wiring**: `ide-status/hooks/hooks.json`
+- **Script**: `ide-status/scripts/statusline.sh`
+
+### Output Format
+
+```
+VS Code · Claude 4 Sonnet · $0.15 · ctx 42%
+```
+
+When no IDE is connected:
+```
+Claude 4 Sonnet · $0.15 · ctx 42%
+```
+
+### Dependencies
+
+- `jq` (required for JSON parsing)
+
 ## Files
 
 - Marketplace definition: `.claude-plugin/marketplace.json`
 - Plugin manifests:
   - `claude-code-notification/.claude-plugin/plugin.json`
   - `browser-mcp/.claude-plugin/plugin.json`
-- Hooks config: `claude-code-notification/hooks/hooks.json`
-- MCP configuration: `browser-mcp/.mcp.json`
+  - `remote-figma/.claude-plugin/plugin.json`
+  - `ide-status/.claude-plugin/plugin.json`
+- Hooks config:
+  - `claude-code-notification/hooks/hooks.json`
+  - `ide-status/hooks/hooks.json`
+- MCP configuration:
+  - `browser-mcp/.mcp.json`
+  - `remote-figma/.mcp.json`
 - Commands: `browser-mcp/commands/google-search.md`
-- Skills: `browser-mcp/skills/rootdata-scraper/SKILL.md`
+- Skills:
+  - `browser-mcp/skills/rootdata-scraper/SKILL.md`
+  - `remote-figma/skills/implement-design/SKILL.md`
+  - `remote-figma/skills/code-connect-components/SKILL.md`
+  - `remote-figma/skills/create-design-system-rules/SKILL.md`
 
 ## License
 

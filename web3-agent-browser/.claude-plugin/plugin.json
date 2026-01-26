@@ -1,0 +1,10 @@
+{
+  "name": "web3-agent-browser",
+  "version": "0.1.0",
+  "description": "Web3 data scraping automation using agent-browser CLI. Collects airdrops, fundraising, and token market data from Web3 platforms.",
+  "author": {
+    "name": "RitMEX",
+    "url": "https://github.com/anthropics/claude-code-plugins"
+  },
+  "keywords": ["web3", "airdrop", "fundraising", "crypto", "scraper", "agent-browser"]
+}
