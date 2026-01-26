@@ -1,6 +1,6 @@
 # ritmex-marketplace
 
-Claude Code plugin marketplace hosting `claude-code-notification`, `browser-mcp`, `remote-figma`, and `ide-status` plugins.
+Claude Code plugin marketplace hosting `claude-code-notification`, `browser-mcp`, `remote-figma`, `ide-status`, and `web3-agent-browser` plugins.
 
 ## Quick start
 
@@ -11,6 +11,7 @@ Claude Code plugin marketplace hosting `claude-code-notification`, `browser-mcp`
   - `/plugin install browser-mcp@ritmex-marketplace`
   - `/plugin install remote-figma@ritmex-marketplace`
   - `/plugin install ide-status@ritmex-marketplace`
+  - `/plugin install web3-agent-browser@ritmex-marketplace`
 - Verify:
   - `/plugin marketplace list`
   - `/plugin`
@@ -25,6 +26,7 @@ This marketplace hosts the following plugins:
 | `browser-mcp` | Browser automation via MCP with Google Search command and Rootdata scraper skill |
 | `remote-figma` | Figma design integration via MCP with design implementation skills |
 | `ide-status` | Display IDE connection status and model info in Claude Code status line |
+| `web3-agent-browser` | Web3 data scraping automation using agent-browser CLI for airdrops, fundraising, and token data |
 
 ## Dependencies for claude-code-notification (macOS)
 
@@ -47,6 +49,45 @@ Optional:
 - Node.js and npm (for npx)
 - The plugin uses `@browsermcp/mcp` package via npx (automatically installed)
 
+## Dependencies for web3-agent-browser
+
+- `agent-browser` CLI installed and configured
+- Telegram notification MCP (optional, for notifications)
+
+### Setting up Telegram Notifications
+
+The `web3-agent-browser` plugin can send reports to Telegram. To enable this:
+
+1. Get a Telegram Bot Token from [@BotFather](https://t.me/botfather)
+2. Get your Chat ID (your personal chat ID or channel ID)
+3. Add the Telegram notification MCP server:
+
+```bash
+claude mcp add --transport stdio telegram-notification --scope user \
+  --env TELEGRAM_BOT_TOKEN=YOUR_BOT_TOKEN \
+  --env TELEGRAM_CHAT_ID=YOUR_CHAT_ID \
+  -- npx -y telegram-notification-mcp
+```
+
+**Manual Configuration** (add to `~/.claude/settings.json` or project `.claude/settings.json`):
+
+```json
+{
+  "mcpServers": {
+    "telegram-notification": {
+      "command": "npx",
+      "args": ["telegram-notification-mcp@latest"],
+      "env": {
+        "TELEGRAM_BOT_TOKEN": "YOUR_TELEGRAM_BOT_TOKEN",
+        "TELEGRAM_CHAT_ID": "YOUR_TELEGRAM_CHAT_ID"
+      }
+    }
+  }
+}
+```
+
+Once configured, the `web3-report` skill will automatically send summaries to your Telegram.
+
 ## Team / project setup (optional)
 
 Add the marketplace automatically for a repo by setting `extraKnownMarketplaces` in `.claude/settings.json`:
@@ -65,7 +106,8 @@ Add the marketplace automatically for a repo by setting `extraKnownMarketplaces`
     "claude-code-notification@ritmex-marketplace": true,
     "browser-mcp@ritmex-marketplace": true,
     "remote-figma@ritmex-marketplace": true,
-    "ide-status@ritmex-marketplace": true
+    "ide-status@ritmex-marketplace": true,
+    "web3-agent-browser@ritmex-marketplace": true
   }
 }
 ```
@@ -143,6 +185,7 @@ Claude 4 Sonnet · $0.15 · ctx 42%
   - `browser-mcp/.claude-plugin/plugin.json`
   - `remote-figma/.claude-plugin/plugin.json`
   - `ide-status/.claude-plugin/plugin.json`
+  - `web3-agent-browser/.claude-plugin/plugin.json`
 - Hooks config:
   - `claude-code-notification/hooks/hooks.json`
   - `ide-status/hooks/hooks.json`
@@ -155,6 +198,12 @@ Claude 4 Sonnet · $0.15 · ctx 42%
   - `remote-figma/skills/implement-design/SKILL.md`
   - `remote-figma/skills/code-connect-components/SKILL.md`
   - `remote-figma/skills/create-design-system-rules/SKILL.md`
+  - `web3-agent-browser/skills/scrape-airdrops/SKILL.md`
+  - `web3-agent-browser/skills/scrape-fundraising/SKILL.md`
+  - `web3-agent-browser/skills/scrape-tokens/SKILL.md`
+  - `web3-agent-browser/skills/web3-report/SKILL.md`
+- Agents:
+  - `web3-agent-browser/agents/web3-scraper.md`
 
 ## License
 
