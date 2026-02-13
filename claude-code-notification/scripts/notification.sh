@@ -1,14 +1,23 @@
 #!/bin/bash
-# Hooks receive JSON data via stdin containing session information and event-specific data:
+# Desktop notification bridge for Claude Code and OpenAI Codex CLI.
+#
+# ── Claude Code ──
+# Hooks receive JSON data via stdin:
 # {
 #   "session_id": "abc123",
-#   "transcript_path": "/Users/.../.claude/projects/.../00893aaf-19fa-41d2-8238-13269b9b3ca0.jsonl",
+#   "transcript_path": "/Users/.../.claude/projects/.../00893aaf.jsonl",
 #   "cwd": "/Users/...",
 #   "permission_mode": "default",
 #   "hook_event_name": "Notification",
 #   "message": "Claude needs your permission to use Bash",
 #   "notification_type": "permission_prompt"
 # }
+#
+# ── OpenAI Codex CLI ──
+# Invoked via `notify` config with event name as $1:
+#   notify = ["bash", "/path/to/notification.sh"]
+# Recognised events: agent-turn-complete, complete, done, start, session-start,
+#   error, fail*, permission*, approve*
 
 set -o pipefail
 
@@ -33,10 +42,37 @@ truncate_message() {
   printf "%s…" "${s:0:$((max_len - 1))}"
 }
 
+is_codex_invocation() {
+  # Codex passes the event name as $1; Claude Code sends JSON via stdin with no args.
+  [ -n "${1:-}" ]
+}
+
+codex_event_to_json() {
+  # Maps a Codex CLI event string to the internal hook JSON format.
+  local codex_event="${1:-agent-turn-complete}"
+  local event="" ntype=""
+
+  case "$codex_event" in
+    agent-turn-complete|complete|done)
+      event="Stop" ;;
+    start|session-start)
+      event="SessionStart" ;;
+    error|fail*)
+      event="Stop" ;;
+    permission*|approve*)
+      event="Notification"; ntype="permission_prompt" ;;
+    *)
+      event="Stop" ;;
+  esac
+
+  local sid="codex-${CODEX_SESSION_ID:-$$}"
+
+  printf '{"hook_event_name":"%s","notification_type":"%s","cwd":"%s","session_id":"%s","permission_mode":"","message":""}' \
+    "$event" "$ntype" "$PWD" "$sid"
+}
+
 read_stdin_json() {
   # Reads stdin fully into $HOOK_JSON (global). Returns non-zero if empty.
-  # Most reliable: read the full JSON payload until stdin closes.
-  # This matches the official docs + common community examples.
   HOOK_JSON="$(cat)"
 
   if [ -z "${HOOK_JSON//$'\n'/}" ]; then
@@ -180,13 +216,22 @@ focus_warp_if_possible() {
 }
 
 main() {
-  if ! read_stdin_json; then
+  if is_codex_invocation "$1"; then
+    # Codex mode: synthesise JSON from the positional event argument.
+    HOOK_JSON="$(codex_event_to_json "$1")"
+  elif ! read_stdin_json; then
     exit 0
   fi
 
   parse_hook_json
 
-  local title="${CLAUDE_NOTIFY_TITLE:-Claude Code}"
+  # Pick a sensible title depending on the caller.
+  local title
+  if is_codex_invocation "$1"; then
+    title="${CODEX_NOTIFY_TITLE:-Codex}"
+  else
+    title="${CLAUDE_NOTIFY_TITLE:-Claude Code}"
+  fi
   local subtitle=""
   if [ -n "$notification_type" ]; then
     subtitle="$notification_type"
