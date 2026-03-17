@@ -1,11 +1,11 @@
 {
   "hooks": {
-    "StatusLine": [
+    "SessionStart": [
       {
         "hooks": [
           {
             "type": "command",
-            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/scripts/statusline.sh\"",
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/scripts/install-statusline.sh\"",
             "timeout": 5
           }
         ]

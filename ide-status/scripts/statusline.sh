@@ -1,12 +1,11 @@
 #!/bin/bash
-# Claude Code Status Line - Minimal Design
-
+# Claude Code Status Line - IDE connection status display
 input=$(cat)
 
-# Extract info
+# Extract fields from statusLine JSON
 MODEL=$(echo "$input" | jq -r '.model.display_name // "unknown"')
 COST=$(echo "$input" | jq -r '.cost.total_cost_usd // 0' | xargs printf "%.2f")
-CTX=$(echo "$input" | jq -r '.context_window.used_percentage // 0' | xargs printf "%d")
+PCT=$(echo "$input" | jq -r '.context_window.used_percentage // 0' | cut -d. -f1)
 
 # Detect IDE connection
 IDE=""
@@ -23,7 +22,7 @@ fi
 
 # Build status line
 if [[ -n "$IDE" ]]; then
-    echo "$IDE · $MODEL · \$$COST · ctx ${CTX}%"
+    echo "$IDE · $MODEL · \$$COST · ctx ${PCT}%"
 else
-    echo "$MODEL · \$$COST · ctx ${CTX}%"
+    echo "$MODEL · \$$COST · ctx ${PCT}%"
 fi
