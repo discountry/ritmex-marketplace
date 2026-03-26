@@ -14,4 +14,6 @@ if jq -e '.statusLine' "$SETTINGS_FILE" > /dev/null 2>&1; then
 fi
 
 # Add statusLine config
-jq --arg cmd "bash \"$STATUSLINE_SCRIPT\"" '. + {"statusLine": {"type": "command", "command": $cmd}}' "$SETTINGS_FILE" > "${SETTINGS_FILE}.tmp" && mv "${SETTINGS_FILE}.tmp" "$SETTINGS_FILE"
+jq --arg cmd "bash \"$STATUSLINE_SCRIPT\"" \
+   '. + {"statusLine": {"type": "command", "command": $cmd}}' \
+   "$SETTINGS_FILE" > "${SETTINGS_FILE}.tmp" && mv "${SETTINGS_FILE}.tmp" "$SETTINGS_FILE"
