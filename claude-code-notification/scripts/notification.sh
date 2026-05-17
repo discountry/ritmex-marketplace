@@ -1,6 +1,14 @@
 #!/bin/bash
 # Desktop notification bridge for Claude Code and OpenAI Codex CLI.
 #
+# Delivery preference:
+#   1. Warp (TERM_PROGRAM=WarpTerminal) → OSC 777 written to /dev/tty so Warp's
+#      native notification UI (2026.04+) renders the toast. terminal-notifier
+#      and osascript notifications are attributed to the helper binary and are
+#      silently dropped on recent Warp builds.
+#   2. terminal-notifier (if installed) for other macOS terminals.
+#   3. osascript fallback (Notification Center via Script Editor attribution).
+#
 # ── Claude Code ──
 # Hooks receive JSON data via stdin:
 # {
@@ -147,6 +155,35 @@ PY
   return 0
 }
 
+sanitize_osc_payload() {
+  # OSC 777 payload uses ';' as a field separator and BEL/'\007' as a terminator.
+  # Strip newlines, carriage returns, semicolons, and BEL from $1.
+  local s="$1"
+  s="${s//$'\n'/ }"
+  s="${s//$'\r'/ }"
+  s="${s//$'\a'/ }"
+  s="${s//;/,}"
+  printf "%s" "$s"
+}
+
+is_warp_terminal() {
+  [ "${TERM_PROGRAM:-}" = "WarpTerminal" ] || [ -n "${WARP_IS_LOCAL_SHELL_SESSION:-}" ]
+}
+
+notify_warp_osc777() {
+  # Warp >= 2026.04 renders OSC 777 escape sequences as native desktop notifications.
+  # Writing to /dev/tty (the controlling terminal) ensures Warp's parser receives the
+  # sequence even though stdout/stderr are captured by the Claude Code hook runner.
+  # Format: ESC ] 777 ; notify ; <title> ; <body> BEL
+  local title body
+  title="$(sanitize_osc_payload "$1")"
+  body="$(sanitize_osc_payload "$2")"
+
+  [ -e /dev/tty ] || return 1
+  printf '\033]777;notify;%s;%s\007' "$title" "$body" >/dev/tty 2>/dev/null || return 1
+  return 0
+}
+
 notify_macos_terminal_notifier() {
   # Usage: notify_macos_terminal_notifier "title" "subtitle" "message" ["execute_cmd"] ["open_target"] ["icon_path"]
   local title="$1"
@@ -270,6 +307,20 @@ main() {
   # If we have a transcript path, make the notification open it when clicked (unless we already set execute_cmd).
   if [ -z "$execute_cmd" ] && [ -n "$transcript_path" ]; then
     open_target="$transcript_path"
+  fi
+
+  # Prefer Warp's native notifications when running inside Warp. The legacy paths
+  # (terminal-notifier / osascript) are attributed to the helper binary rather than
+  # Warp, and on recent Warp builds they are silently dropped because Warp's
+  # revamped notifications UI (2026.04+) routes through OSC escapes.
+  if is_warp_terminal; then
+    local warp_title="$title"
+    if [ -n "$subtitle" ]; then
+      warp_title="$title — $subtitle"
+    fi
+    if notify_warp_osc777 "$warp_title" "$body"; then
+      exit 0
+    fi
   fi
 
   if have_cmd terminal-notifier; then
