@@ -2,12 +2,16 @@
 # Desktop notification bridge for Claude Code and OpenAI Codex CLI.
 #
 # Delivery preference:
-#   1. Warp (TERM_PROGRAM=WarpTerminal) → OSC 777 written to /dev/tty so Warp's
-#      native notification UI (2026.04+) renders the toast. terminal-notifier
-#      and osascript notifications are attributed to the helper binary and are
-#      silently dropped on recent Warp builds.
-#   2. terminal-notifier (if installed) for other macOS terminals.
-#   3. osascript fallback (Notification Center via Script Editor attribution).
+#   1. Warp (TERM_PROGRAM=WarpTerminal) → OSC 777 written to the Warp pane's PTY
+#      so Warp's native notification UI renders the toast and clicking it focuses
+#      Warp. Claude Code runs hooks WITHOUT a controlling terminal, so /dev/tty is
+#      not openable; the device is resolved by walking the process tree up to the
+#      `claude` ancestor and writing to its tty (e.g. /dev/ttys001) directly.
+#   2. terminal-notifier (if installed) for other macOS terminals; attributed to
+#      Warp via -sender so clicking activates Warp.
+#   3. osascript fallback. Notification Center attributes these to Script Editor
+#      (clicking opens Script Editor) — an unavoidable macOS limitation without
+#      terminal-notifier; only reached outside Warp and without terminal-notifier.
 #
 # ── Claude Code ──
 # Hooks receive JSON data via stdin:
@@ -170,28 +174,67 @@ is_warp_terminal() {
   [ "${TERM_PROGRAM:-}" = "WarpTerminal" ] || [ -n "${WARP_IS_LOCAL_SHELL_SESSION:-}" ]
 }
 
+resolve_terminal_device() {
+  # Prints a writable terminal device for OSC notifications, or returns 1.
+  #
+  # Claude Code runs hooks without a controlling terminal, so /dev/tty cannot be
+  # opened and the OSC sequence never reaches Warp. The Warp pane's PTY is still
+  # reachable: it is the controlling tty of an ancestor process (the `claude`
+  # binary), and its device node (e.g. /dev/ttys001) is owned by the user and
+  # writable. Walk up the process tree to find it.
+
+  # 1. Use the controlling terminal directly when this process actually has one
+  #    (interactive runs, e.g. Codex invoking the script from a live shell).
+  if { : >/dev/tty; } 2>/dev/null; then
+    printf '/dev/tty'
+    return 0
+  fi
+
+  # 2. Walk parent processes looking for a real, writable tty device.
+  local pid="${PPID:-$$}" guard=0 tt ppid
+  while [ -n "$pid" ] && [ "$pid" -gt 1 ] 2>/dev/null && [ "$guard" -lt 25 ]; do
+    tt="$(ps -o tty= -p "$pid" 2>/dev/null | tr -d '[:space:]')"
+    case "$tt" in
+      ''|'?'|'??') : ;;
+      *)
+        if [ -c "/dev/$tt" ] && [ -w "/dev/$tt" ]; then
+          printf '/dev/%s' "$tt"
+          return 0
+        fi
+        ;;
+    esac
+    ppid="$(ps -o ppid= -p "$pid" 2>/dev/null | tr -d '[:space:]')"
+    [ -z "$ppid" ] || [ "$ppid" = "$pid" ] && break
+    pid="$ppid"
+    guard=$((guard + 1))
+  done
+  return 1
+}
+
 notify_warp_osc777() {
-  # Warp >= 2026.04 renders OSC 777 escape sequences as native desktop notifications.
-  # Writing to /dev/tty (the controlling terminal) ensures Warp's parser receives the
-  # sequence even though stdout/stderr are captured by the Claude Code hook runner.
+  # Warp renders OSC 777 escape sequences as native desktop notifications, and a
+  # click on Warp's own notification focuses Warp. Writing the sequence to the
+  # resolved Warp PTY device lets the parser receive it even though the hook's
+  # stdout/stderr are captured by the Claude Code hook runner.
   # Format: ESC ] 777 ; notify ; <title> ; <body> BEL
-  local title body
+  local title body dev
   title="$(sanitize_osc_payload "$1")"
   body="$(sanitize_osc_payload "$2")"
 
-  [ -e /dev/tty ] || return 1
-  printf '\033]777;notify;%s;%s\007' "$title" "$body" >/dev/tty 2>/dev/null || return 1
+  dev="$(resolve_terminal_device)" || return 1
+  printf '\033]777;notify;%s;%s\007' "$title" "$body" >"$dev" 2>/dev/null || return 1
   return 0
 }
 
 notify_macos_terminal_notifier() {
-  # Usage: notify_macos_terminal_notifier "title" "subtitle" "message" ["execute_cmd"] ["open_target"] ["icon_path"]
+  # Usage: notify_macos_terminal_notifier "title" "subtitle" "message" ["execute_cmd"] ["open_target"] ["icon_path"] ["sender_id"]
   local title="$1"
   local subtitle="$2"
   local body="$3"
   local execute_cmd="${4:-}"
   local open_target="${5:-}"
   local icon_path="${6:-}"
+  local sender_id="${7:-}"
 
   local args=()
   args+=(-title "$title")
@@ -199,6 +242,15 @@ notify_macos_terminal_notifier() {
     args+=(-subtitle "$subtitle")
   fi
   args+=(-message "$body")
+
+  # -sender attributes the notification to a real app (its icon, and a click
+  # activates that app). When set, it is the whole click action — skip the
+  # custom icon/execute/open so the click reliably focuses the terminal app.
+  if [ -n "$sender_id" ]; then
+    args+=(-sender "$sender_id")
+    terminal-notifier "${args[@]}" >/dev/null 2>&1
+    return
+  fi
 
   if [ -n "$icon_path" ] && [ -f "$icon_path" ]; then
     args+=(-appIcon "$icon_path")
@@ -237,6 +289,20 @@ notify_macos_osascript() {
   else
     log_err "[claude-code-notification] ${title}${subtitle:+ — $subtitle}: $body"
   fi
+}
+
+warp_bundle_id() {
+  # Resolve Warp's bundle identifier (e.g. dev.warp.Warp-Stable) so a
+  # terminal-notifier notification is attributed to Warp. Falls back to the
+  # stable id when Spotlight metadata is unavailable.
+  local id=""
+  if [ -d "/Applications/Warp.app" ]; then
+    id="$(mdls -name kMDItemCFBundleIdentifier -raw /Applications/Warp.app 2>/dev/null)"
+  fi
+  case "$id" in
+    ''|'(null)') id="dev.warp.Warp-Stable" ;;
+  esac
+  printf '%s' "$id"
 }
 
 focus_warp_if_possible() {
@@ -324,7 +390,11 @@ main() {
   fi
 
   if have_cmd terminal-notifier; then
-    notify_macos_terminal_notifier "$title" "$subtitle" "$body" "$execute_cmd" "$open_target" "$icon_path" || true
+    local warp_sender=""
+    if is_warp_terminal; then
+      warp_sender="$(warp_bundle_id)"
+    fi
+    notify_macos_terminal_notifier "$title" "$subtitle" "$body" "$execute_cmd" "$open_target" "$icon_path" "$warp_sender" || true
     exit 0
   fi
 
