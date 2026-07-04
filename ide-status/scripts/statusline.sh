@@ -15,7 +15,26 @@ WHITE='\033[97m'
 # ── Extract fields ─────────────────────────────────────────────────────
 MODEL=$(echo "$input" | jq -r '.model.display_name // "unknown"')
 COST=$(echo "$input" | jq -r '.cost.total_cost_usd // 0' | xargs printf "%.2f")
-PCT=$(echo "$input" | jq -r '.context_window.used_percentage // 0' | cut -d. -f1)
+PCT=$(echo "$input" | jq -r '
+  def number_or_zero:
+    if type == "number" then .
+    elif type == "string" then (tonumber? // 0)
+    else 0
+    end;
+
+  (.context_window // {}) as $cw
+  | ($cw.current_usage // {}) as $usage
+  | ($cw.context_window_size | number_or_zero) as $size
+  | (($usage.input_tokens | number_or_zero)
+    + ($usage.cache_creation_input_tokens | number_or_zero)
+    + ($usage.cache_read_input_tokens | number_or_zero)) as $used
+  | if $size > 0 and $cw.current_usage != null then
+      (($used * 100 / $size) | floor)
+    else
+      (($cw.used_percentage | number_or_zero) | floor)
+    end
+  | if . < 0 then 0 elif . > 100 then 100 else . end
+')
 DURATION_MS=$(echo "$input" | jq -r '.cost.total_duration_ms // 0')
 FIVE_H=$(echo "$input" | jq -r '.rate_limits.five_hour.used_percentage // empty')
 WEEK=$(echo "$input" | jq -r '.rate_limits.seven_day.used_percentage // empty')
